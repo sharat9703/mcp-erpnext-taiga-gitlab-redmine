@@ -25,7 +25,7 @@ npm install -g mcp-erpnext
 ### From source
 
 ```bash
-git clone https://github.com/Gaurav-Pasi/mcp-erpnext.git
+git clone https://github.com/sharat9703/mcp-erpnext-taiga-gitlab-redmine.git
 cd mcp-erpnext
 npm install
 ```
@@ -248,10 +248,5 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Author
 
-**Gaurav Pasi** - [GitHub](https://github.com/Gaurav-Pasi)
+**Sharat Yaragatti** - [GitHub](https://github.com/sharat9703)
 
-## Links
-
-- [GitHub Repository](https://github.com/Gaurav-Pasi/mcp-erpnext)
-- [npm Package](https://www.npmjs.com/package/mcp-erpnext)
-- [Report Issues](https://github.com/Gaurav-Pasi/mcp-erpnext/issues)
