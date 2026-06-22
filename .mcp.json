@@ -1,0 +1,8 @@
+{
+  "name": "mcp-erpnext",
+  "version": "1.0.0",
+  "description": "MCP Server for ERPNext - manage timesheets, leave applications, projects and more",
+  "command": "node",
+  "args": ["src/index.js"],
+  "cwd": "D:\\mcp-erpnext"
+}

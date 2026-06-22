@@ -1,0 +1,55 @@
+{
+  "name": "mcp-erpnext",
+  "version": "1.0.0",
+  "description": "MCP Server for ERPNext - manage timesheets, leave applications, projects and more via Claude, Gemini or any MCP-compatible AI assistant",
+  "main": "src/index.js",
+  "type": "module",
+  "bin": {
+    "mcp-erpnext": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "erpnext",
+    "frappe",
+    "timesheet",
+    "leave",
+    "hr",
+    "claude",
+    "gemini",
+    "model-context-protocol",
+    "ai",
+    "assistant",
+    "erp"
+  ],
+  "author": "Gaurav Pasi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gaurav-Pasi/mcp-erpnext.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Gaurav-Pasi/mcp-erpnext/issues"
+  },
+  "homepage": "https://github.com/Gaurav-Pasi/mcp-erpnext#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.6.0",
+    "axios-cookiejar-support": "^5.0.0",
+    "dotenv": "^16.3.1",
+    "otplib": "^12.0.1",
+    "tough-cookie": "^4.1.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "src/**/*",
+    "README.md",
+    "USAGE.md",
+    "LICENSE"
+  ]
+}
