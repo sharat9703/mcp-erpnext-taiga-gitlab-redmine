@@ -129,6 +129,56 @@ export const taskTools = [
       },
       required: ['tasks']
     }
+  },
+  {
+    name: 'erpnext_get_developer_tasks',
+    description: 'Get Developer Tasks assigned to a developer (defaults to the logged-in user) with optional filters by date range, status, product, or subject search. Returns the tasks plus a breakdown of task counts per client/project (SBI, ICICI, TCIL/Mudra 2, etc.). Useful for building a delivery footprint or activity report.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        developer_user: {
+          type: 'string',
+          description: 'Developer user id / email (e.g., "sharatyaragatti@credenceanalytics.com"). Defaults to the currently logged-in user.'
+        },
+        developer_name: {
+          type: 'string',
+          description: 'Filter by developer name (partial match). Use instead of developer_user.'
+        },
+        from_date: {
+          type: 'string',
+          description: 'Only tasks created on/after this date (YYYY-MM-DD)'
+        },
+        to_date: {
+          type: 'string',
+          description: 'Only tasks created on/before this date (YYYY-MM-DD)'
+        },
+        status: {
+          type: 'string',
+          description: 'Filter by task status (e.g., "Reviewed", "Open", "Completed")'
+        },
+        product: {
+          type: 'string',
+          description: 'Filter by product (e.g., "MercuryFx")'
+        },
+        search: {
+          type: 'string',
+          description: 'Substring match on the task subject (e.g., "APIGEE", "encryption")'
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of tasks to return (default: all, paginated in batches of 500)'
+        },
+        order: {
+          type: 'string',
+          description: 'Sort by creation date (default: "desc")',
+          enum: ['asc', 'desc']
+        },
+        include_breakdown: {
+          type: 'boolean',
+          description: 'Include a per-client task count breakdown (default: true)'
+        }
+      }
+    }
   }
 ];
 
