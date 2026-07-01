@@ -672,8 +672,81 @@ export async function createTasksFromAnalysis(erpnextClient, params) {
   return result;
 }
 
+/**
+ * Classify a Developer Task subject into a client/project bucket.
+ * @param {string} subject
+ * @returns {string}
+ */
+function classifyTaskClient(subject) {
+  const s = (subject || '').toLowerCase();
+  if (/\bicici\b/.test(s)) return 'ICICI';
+  if (/\bsbi\b/.test(s)) return 'SBI';
+  if (/\bybl\b|yes bank/.test(s)) return 'YBL (Yes Bank)';
+  if (/\bkotak\b/.test(s)) return 'Kotak';
+  if (/tcil|thomas cook|airportlit|mudra ?2|retail|astra|\bpgl\b|vkyc|e-?sign/.test(s)) return 'TCIL / Mudra 2';
+  if (/\bifm\b|eforex|etrade/.test(s)) return 'IFM eForex';
+  if (/\bmfx\b|mercury|automailer|fxretail|orderboard/.test(s)) return 'MercuryFx core';
+  return 'Other';
+}
+
+/**
+ * Get Developer Tasks for a developer with optional filters and a client breakdown.
+ * @param {Object} erpnextClient - ERPNext client instance
+ * @param {Object} params - see erpnext_get_developer_tasks tool schema
+ * @returns {Object} { total, filters, by_client, tasks }
+ */
+export async function getDeveloperTasks(erpnextClient, params = {}) {
+  const rows = await erpnextClient.getDeveloperTasks({
+    developer_user: params.developer_user,
+    developer_name: params.developer_name,
+    from_date: params.from_date,
+    to_date: params.to_date,
+    status: params.status,
+    product: params.product,
+    search: params.search,
+    limit: params.limit,
+    order: params.order
+  });
+
+  const includeBreakdown = params.include_breakdown !== false;
+  const byClient = {};
+  const tasks = rows.map(t => {
+    const client = classifyTaskClient(t.task);
+    if (includeBreakdown) byClient[client] = (byClient[client] || 0) + 1;
+    return {
+      task: t.task,
+      client,
+      status: t.status,
+      product: t.product,
+      created: (t.creation || '').slice(0, 10),
+      target_date: t.target_date,
+      completed_date: t.completed_date
+    };
+  });
+
+  const result = {
+    total: tasks.length,
+    filters: {
+      developer_user: params.developer_user || params.developer_name || 'current user',
+      from_date: params.from_date || null,
+      to_date: params.to_date || null,
+      status: params.status || null,
+      product: params.product || null,
+      search: params.search || null
+    },
+    tasks
+  };
+  if (includeBreakdown) {
+    result.by_client = Object.entries(byClient)
+      .sort((a, b) => b[1] - a[1])
+      .reduce((acc, [k, v]) => (acc[k] = v, acc), {});
+  }
+  return result;
+}
+
 export default {
   listMergeRequests,
   analyzeMergeRequest,
-  createTasksFromAnalysis
+  createTasksFromAnalysis,
+  getDeveloperTasks
 };
