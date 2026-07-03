@@ -87,7 +87,7 @@ const resourceHandlers = createResourceHandlers(erpnext);
 
 // Create MCP Server
 const server = new Server(
-  { name: 'mcp-erpnext', version: '1.0.0' },
+  { name: 'devflow-mcp', version: '1.0.0' },
   { capabilities: { tools: {}, resources: {} } }
 );
 

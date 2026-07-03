@@ -1,11 +1,11 @@
 {
-  "name": "mcp-erpnext",
+  "name": "devflow-mcp",
   "version": "1.0.0",
-  "description": "MCP Server for ERPNext - manage timesheets, leave applications, projects and more via Claude, Gemini or any MCP-compatible AI assistant",
+  "description": "Engineering-workflow MCP server: GitLab, Taiga, Redmine and ERPNext integration for AI assistants — merge requests, tasks, timesheets, software releases and more.",
   "main": "src/index.js",
   "type": "module",
   "bin": {
-    "mcp-erpnext": "./src/index.js"
+    "devflow-mcp": "./src/index.js"
   },
   "scripts": {
     "start": "node src/index.js",
