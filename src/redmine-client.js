@@ -4,6 +4,9 @@
  */
 
 import axios from 'axios';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 export class RedmineClient {
   constructor(config) {
@@ -341,6 +344,59 @@ export class RedmineClient {
       issueUrlsOrIds.map(id => this.getIssueTitle(id))
     );
     return results;
+  }
+
+  /**
+   * Extract a numeric attachment id from a Redmine attachment id or URL.
+   * Accepts: "267232", ".../attachments/download/267232/file.txt",
+   *          ".../attachments/267232".
+   * @param {string|number} idOrUrl
+   * @returns {string} attachment id
+   */
+  parseAttachmentId(idOrUrl) {
+    if (idOrUrl == null) throw new Error('attachment id/url is required');
+    const s = String(idOrUrl).trim();
+    if (/^\d+$/.test(s)) return s;
+    const m = s.match(/attachments\/(?:download\/)?(\d+)/);
+    if (m) return m[1];
+    throw new Error(`Could not parse an attachment id from "${idOrUrl}"`);
+  }
+
+  /**
+   * Get attachment metadata (filename, size, content type, content_url).
+   * @param {string} attachmentId
+   */
+  async getAttachmentMeta(attachmentId) {
+    const res = await this.client.get(`/attachments/${attachmentId}.json`);
+    return res.data.attachment;
+  }
+
+  /**
+   * Download a Redmine attachment to disk.
+   * @param {string|number} idOrUrl - attachment id or download URL
+   * @param {Object} [opts]
+   * @param {string} [opts.saveDir] - directory to save into (default: os tmp/devflow-attachments)
+   * @returns {Object} { id, filename, size, contentType, path }
+   */
+  async downloadAttachment(idOrUrl, opts = {}) {
+    const attachmentId = this.parseAttachmentId(idOrUrl);
+    const meta = await this.getAttachmentMeta(attachmentId);
+    const dir = opts.saveDir || path.join(os.tmpdir(), 'devflow-attachments', 'redmine');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, `${attachmentId}_${meta.filename}`);
+    const dl = await axios.get(meta.content_url, {
+      headers: { 'X-Redmine-API-Key': this.apiKey },
+      responseType: 'arraybuffer',
+      timeout: 120000
+    });
+    fs.writeFileSync(filePath, Buffer.from(dl.data));
+    return {
+      id: Number(attachmentId),
+      filename: meta.filename,
+      size: meta.filesize,
+      contentType: meta.content_type,
+      path: filePath
+    };
   }
 }
 
