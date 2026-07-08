@@ -296,6 +296,32 @@ export const softwareReleaseTools = [
       },
       required: []
     }
+  },
+  {
+    name: 'erpnext_download_redmine_attachment',
+    description: "Download a file attachment from a Redmine issue to local disk (e.g. an issue's SQL script, spreadsheet, or document). Accepts the attachment id or a Redmine attachment download URL. Returns the saved file path, metadata, and — for text-like files — a content preview. Requires REDMINE_API_KEY.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        attachment: {
+          type: 'string',
+          description: 'Attachment id (e.g. "267232") or a download URL (e.g. ".../attachments/download/267232/Script.txt").'
+        },
+        save_dir: {
+          type: 'string',
+          description: 'Directory to save into. Default: OS temp/devflow-attachments/redmine.'
+        },
+        include_text_preview: {
+          type: 'boolean',
+          description: 'For text-like files, include a preview of the content in the response (default: true).'
+        },
+        preview_chars: {
+          type: 'number',
+          description: 'Max characters of text preview (default: 4000).'
+        }
+      },
+      required: ['attachment']
+    }
   }
 ];
 
