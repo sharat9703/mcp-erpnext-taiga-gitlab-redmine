@@ -9,6 +9,9 @@
  */
 
 import axios from 'axios';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 export class TaigaClient {
   /**
@@ -162,6 +165,96 @@ export class TaigaClient {
         `Taiga setTaskCustomAttributeValues failed (${formatStatus(e)}): ${formatDetail(e)}`
       );
     }
+  }
+
+  // ── Read / update helpers (tasks: description, attachments, status) ──
+
+  /** Current authenticated user (id, full_name, username). */
+  async getMe() {
+    const res = await this.client.get('/users/me', { headers: this.authHeaders() });
+    return res.data;
+  }
+
+  /** Projects the given member (id) belongs to; all accessible if omitted. */
+  async listProjects(memberId) {
+    const params = { page_size: 200 };
+    if (memberId) params.member = memberId;
+    const res = await this.client.get('/projects', { headers: this.authHeaders(), params });
+    return res.data;
+  }
+
+  /** One page of tasks, optionally filtered by project and assignee id. */
+  async getTasksPage({ projectId, assignedTo, page = 1, pageSize = 100 }) {
+    const params = { page, page_size: pageSize };
+    if (projectId) params.project = projectId;
+    if (assignedTo) params.assigned_to = assignedTo;
+    const res = await this.client.get('/tasks', { headers: this.authHeaders(), params });
+    return { rows: res.data, total: Number(res.headers['x-pagination-count'] || res.data.length) };
+  }
+
+  async getTask(taskId) {
+    const res = await this.client.get(`/tasks/${taskId}`, { headers: this.authHeaders() });
+    return res.data;
+  }
+
+  /**
+   * All tasks under a user story. The list endpoint omits `description` — fetch
+   * each task with getTask() when the body is needed.
+   */
+  async getTasksByUserStory(userStoryId) {
+    const res = await this.client.get('/tasks', {
+      headers: this.authHeaders(),
+      params: { user_story: userStoryId }
+    });
+    return res.data;
+  }
+
+  /** Resolve a task by its per-project reference number. */
+  async getTaskByRef(projectId, ref) {
+    const res = await this.client.get('/tasks/by_ref', {
+      headers: this.authHeaders(),
+      params: { project: projectId, ref }
+    });
+    return res.data;
+  }
+
+  /** Attachments on a task: [{ id, name, url, size, ... }]. */
+  async getTaskAttachments(taskId, projectId) {
+    const res = await this.client.get('/tasks/attachments', {
+      headers: this.authHeaders(),
+      params: { object_id: taskId, project: projectId }
+    });
+    return res.data;
+  }
+
+  /** Single attachment metadata (name + download url). */
+  async getAttachment(attachmentId) {
+    const res = await this.client.get(`/tasks/attachments/${attachmentId}`, { headers: this.authHeaders() });
+    return res.data;
+  }
+
+  /**
+   * Patch a task. Taiga uses optimistic concurrency, so we read the current
+   * `version` first and send it with the patch.
+   */
+  async updateTask(taskId, patch) {
+    const current = await this.getTask(taskId);
+    const body = { version: current.version, ...patch };
+    const res = await this.client.patch(`/tasks/${taskId}`, body, {
+      headers: { ...this.authHeaders(), 'Content-Type': 'application/json' }
+    });
+    return res.data;
+  }
+
+  /** Download an attachment (by its Taiga `url`) to disk. */
+  async downloadAttachment(url, { saveDir, attachmentId, filename } = {}) {
+    const dir = saveDir || path.join(os.tmpdir(), 'devflow-attachments', 'taiga');
+    fs.mkdirSync(dir, { recursive: true });
+    const safe = (filename || 'attachment').replace(/[\\/:*?"<>|]/g, '_');
+    const filePath = path.join(dir, `${attachmentId || 'taiga'}_${safe}`);
+    const dl = await axios.get(url, { headers: this.authHeaders(), responseType: 'arraybuffer', timeout: 120000 });
+    fs.writeFileSync(filePath, Buffer.from(dl.data));
+    return { path: filePath, size: dl.data.byteLength };
   }
 }
 

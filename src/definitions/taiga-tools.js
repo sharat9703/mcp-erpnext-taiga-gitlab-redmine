@@ -174,6 +174,134 @@ export const taigaTools = [
       },
       required: ['tasks']
     }
+  },
+  {
+    name: 'erpnext_get_taiga_tasks',
+    description: "Get Taiga tasks assigned to a user (defaults to the authenticated user), with each task's description and attachment metadata. Optionally filter by project (slug or name) and status; by default only OPEN tasks are returned. Use this to read a task's description and see its attachments (download them with erpnext_download_taiga_attachment).",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        assignee: {
+          type: 'string',
+          description: 'Assignee name (matched against project members) or numeric user id. Defaults to the authenticated Taiga user.'
+        },
+        project: {
+          type: 'string',
+          description: 'Restrict to a project by slug or name (e.g. "tcil-mercury-fx" or "TCIL"). Omit to search all the user\'s projects.'
+        },
+        status: {
+          type: 'string',
+          description: 'Filter by task status name (e.g. "New", "In progress", "Ready for test").'
+        },
+        include_closed: {
+          type: 'boolean',
+          description: 'Include closed/done tasks (default: false — only open tasks).'
+        },
+        include_attachments: {
+          type: 'boolean',
+          description: "Include each task's attachment metadata (default: true). Set false to skip per-task attachment lookups for speed."
+        },
+        limit: {
+          type: 'number',
+          description: 'Max tasks to return (default: 500).'
+        }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'erpnext_get_user_story_tasks',
+    description: "Get ALL tasks under a Taiga user story (any assignee) with their FULL descriptions, plus the merge-commit SHAs and Redmine issue ids referenced in each description. Use this — not erpnext_get_taiga_tasks — when working from a user story URL/ref, e.g. to collect the 'Ready for test' points of a sprint and trace them to the commits to cherry-pick into a release branch.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        user_story: {
+          type: 'string',
+          description: 'User story #ref (e.g. "1236") or full Taiga URL (e.g. "https://agile.credenceanalytics.com/project/tcil-mercury-fx/us/1236"). A URL also supplies the project.'
+        },
+        project: {
+          type: 'string',
+          description: 'Project slug or name (e.g. "tcil-mercury-fx"). Required only when user_story is a bare ref.'
+        },
+        status: {
+          type: 'string',
+          description: 'Filter by task status name (e.g. "Ready for test", "New", "Closed"). Omit to return every task in the story.'
+        },
+        include_descriptions: {
+          type: 'boolean',
+          description: 'Fetch each task individually to get its description, commits and redmine_issues (default: true). Set false for a fast subject/status-only listing.'
+        },
+        include_attachments: {
+          type: 'boolean',
+          description: "Include each task's attachment metadata (default: false — costs one extra call per task)."
+        }
+      },
+      required: ['user_story']
+    }
+  },
+  {
+    name: 'erpnext_update_taiga_task',
+    description: "Update a Taiga task's status and/or description. Identify the task by numeric task_id, or by ref + project (slug or name). Status names are resolved to the project's status ids automatically.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: {
+          type: 'number',
+          description: 'Numeric Taiga task id (internal id, not the #ref). Use this OR ref+project.'
+        },
+        ref: {
+          type: 'number',
+          description: 'Task reference number (the #ref shown in Taiga). Requires project.'
+        },
+        project: {
+          type: 'string',
+          description: 'Project slug or name (required when using ref).'
+        },
+        status: {
+          type: 'string',
+          description: 'New status name (e.g. "In progress", "Ready for test", "Closed").'
+        },
+        description: {
+          type: 'string',
+          description: 'New description text (replaces the existing description).'
+        }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'erpnext_download_taiga_attachment',
+    description: "Download a Taiga task attachment to local disk. Provide the attachment url (from erpnext_get_taiga_tasks) or a numeric attachment_id. Returns the saved file path and — for text-like files — a content preview.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: "Attachment download URL (from a task's attachments list)."
+        },
+        attachment_id: {
+          type: 'number',
+          description: 'Numeric attachment id (used to resolve the url when url is not given).'
+        },
+        filename: {
+          type: 'string',
+          description: 'Optional filename to save as.'
+        },
+        save_dir: {
+          type: 'string',
+          description: 'Directory to save into. Default: OS temp/devflow-attachments/taiga.'
+        },
+        include_text_preview: {
+          type: 'boolean',
+          description: 'For text-like files, include a content preview (default: true).'
+        },
+        preview_chars: {
+          type: 'number',
+          description: 'Max characters of text preview (default: 4000).'
+        }
+      },
+      required: []
+    }
   }
 ];
 

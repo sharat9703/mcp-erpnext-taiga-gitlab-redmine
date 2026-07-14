@@ -288,6 +288,68 @@ export class ERPNextClient {
   }
 
   /**
+   * Get Developer Tasks assigned to a developer, with optional filters.
+   * Defaults to the currently logged-in user when no developer is given.
+   *
+   * @param {Object} [options]
+   * @param {string} [options.developer_user] - Developer's user id / email (defaults to logged-in user)
+   * @param {string} [options.developer_name] - Filter by developer name (LIKE match)
+   * @param {string} [options.from_date] - Only tasks created on/after this date (YYYY-MM-DD)
+   * @param {string} [options.to_date] - Only tasks created on/before this date (YYYY-MM-DD)
+   * @param {string} [options.status] - Filter by status (e.g. "Reviewed", "Open")
+   * @param {string} [options.product] - Filter by product (e.g. "MercuryFx")
+   * @param {string} [options.search] - Substring match on the task subject
+   * @param {number} [options.limit] - Max rows to return (default: all, paginated)
+   * @param {string} [options.order] - "asc" | "desc" by creation (default: "desc")
+   * @returns {Promise<Array>} Developer Task rows
+   */
+  async getDeveloperTasks(options = {}) {
+    await this.ensureAuthenticated();
+
+    const filters = [];
+    if (options.developer_name) {
+      filters.push(['developer_name', 'like', `%${options.developer_name}%`]);
+    } else {
+      let user = options.developer_user;
+      if (!user) {
+        const logged = await this.getLoggedUser();
+        user = logged?.message || logged;
+      }
+      filters.push(['developer_user', '=', user]);
+    }
+    if (options.from_date) filters.push(['creation', '>=', `${options.from_date} 00:00:00`]);
+    if (options.to_date) filters.push(['creation', '<=', `${options.to_date} 23:59:59`]);
+    if (options.status) filters.push(['status', '=', options.status]);
+    if (options.product) filters.push(['product', '=', options.product]);
+    if (options.search) filters.push(['task', 'like', `%${options.search}%`]);
+
+    const fields = ['name', 'task', 'status', 'workflow_state', 'product',
+      'developer_name', 'target_date', 'completed_date', 'creation'];
+    const orderDir = (options.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+    const orderBy = `creation ${orderDir}`;
+    const hardLimit = Number.isFinite(options.limit) ? Number(options.limit) : Infinity;
+
+    const rows = [];
+    let start = 0;
+    const page = 500;
+    while (rows.length < hardLimit) {
+      const pageLen = Math.min(page, hardLimit - rows.length);
+      const response = await this.getDocList('Developer Task', {
+        filters: JSON.stringify(filters),
+        fields: JSON.stringify(fields),
+        order_by: orderBy,
+        limit_start: start,
+        limit_page_length: pageLen
+      });
+      const batch = response.data || [];
+      rows.push(...batch);
+      if (batch.length < pageLen) break;
+      start += batch.length;
+    }
+    return rows;
+  }
+
+  /**
    * Create a task in ERPNext (Developer Task doctype)
    * @param {Object} taskData - Task data
    * @returns {Object} Created task

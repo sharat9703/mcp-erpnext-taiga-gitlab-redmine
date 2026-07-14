@@ -8,6 +8,7 @@
  * /api/devtask routes.
  */
 
+import fs from 'node:fs';
 import {
   parseUserStorySlugRef,
   normalizeDueDate,
@@ -15,6 +16,14 @@ import {
   normalizeComplexity,
   taigaTypeToErpCategory
 } from '../taiga-client.js';
+
+/** Match a project (slug or name) from a list. */
+function matchProject(projects, ref) {
+  const key = String(ref).toLowerCase();
+  return projects.find(p => p.slug?.toLowerCase() === key) ||
+    projects.find(p => (p.name || '').toLowerCase() === key) ||
+    projects.find(p => (p.name || '').toLowerCase().includes(key));
+}
 
 /**
  * Validate a Taiga User Story by URL.
@@ -341,9 +350,278 @@ export async function exportTasksToErp(erpnext, params) {
   };
 }
 
+/**
+ * Get Taiga tasks assigned to a user, with description + attachment metadata.
+ * @param {import('../taiga-client.js').TaigaClient} taiga
+ * @param {Object} params - { assignee?, project?, status?, include_closed?, include_attachments?, limit? }
+ */
+export async function getTaigaTasks(taiga, params = {}) {
+  await taiga.authenticate();
+  const me = await taiga.getMe();
+
+  let projects = await taiga.listProjects(me.id);
+  if (params.project) {
+    const p = matchProject(projects, params.project);
+    if (!p) return { status: 'error', message: `No project matching "${params.project}" for this user` };
+    projects = [p];
+  }
+
+  // Resolve assignee id (default: the authenticated user).
+  let assigneeId = me.id, assigneeName = me.full_name || me.username;
+  if (params.assignee) {
+    if (/^\d+$/.test(String(params.assignee))) {
+      assigneeId = Number(params.assignee); assigneeName = String(params.assignee);
+    } else {
+      let member = null;
+      for (const p of projects) {
+        member = await taiga.findProjectMemberByName(p.id, params.assignee);
+        if (member) break;
+      }
+      if (!member) return { status: 'error', message: `No member "${params.assignee}" found in the selected project(s)` };
+      assigneeId = member.id; assigneeName = member.full_name || params.assignee;
+    }
+  }
+
+  const includeAttachments = params.include_attachments !== false;
+  const includeClosed = params.include_closed === true;
+  const limit = params.limit || 500;
+  const tasks = [];
+
+  for (const p of projects) {
+    let page = 1;
+    while (tasks.length < limit) {
+      const { rows, total } = await taiga.getTasksPage({ projectId: p.id, assignedTo: assigneeId, page });
+      if (!rows.length) break;
+      for (const t of rows) {
+        if (!includeClosed && t.is_closed) continue;
+        if (params.status && (t.status_extra_info?.name || '').toLowerCase() !== String(params.status).toLowerCase()) continue;
+        const item = {
+          ref: t.ref,
+          id: t.id,
+          project: p.name,
+          project_slug: p.slug,
+          subject: t.subject,
+          status: t.status_extra_info?.name,
+          is_closed: t.is_closed,
+          user_story: t.user_story_extra_info ? { ref: t.user_story_extra_info.ref, subject: t.user_story_extra_info.subject } : null,
+          due_date: t.due_date,
+          description: t.description || ''
+        };
+        // The task-list endpoint omits description; re-fetch to get the body.
+        if (params.include_descriptions !== false && !item.description) {
+          try { item.description = (await taiga.getTask(t.id)).description || ''; }
+          catch { /* keep empty */ }
+        }
+        if (includeAttachments) {
+          try {
+            const atts = await taiga.getTaskAttachments(t.id, p.id);
+            item.attachments = (atts || []).map(a => ({ id: a.id, name: a.name, size: a.size, url: a.url }));
+          } catch { item.attachments = []; }
+        }
+        tasks.push(item);
+        if (tasks.length >= limit) break;
+      }
+      if (page * 100 >= total) break;
+      page++;
+    }
+    if (tasks.length >= limit) break;
+  }
+
+  return { status: 'success', assignee: assigneeName, assignee_id: assigneeId, count: tasks.length, tasks };
+}
+
+/**
+ * Pull the git SHAs and Redmine issues a task description points at.
+ * SHAs must contain a hex letter so plain numbers (ids, amounts) don't match.
+ */
+function extractReferences(description) {
+  const text = String(description || '');
+  const commits = [...new Set(
+    (text.match(/\b(?=[0-9a-f]{7,40}\b)[0-9a-f]*[a-f][0-9a-f]*\b/g) || [])
+  )];
+  const redmine = [...new Set(
+    (text.match(/support\.credenceanalytics\.com\/issues\/(\d+)/g) || [])
+      .map(u => u.split('/').pop())
+  )];
+  return { commits, redmine };
+}
+
+/**
+ * Get every task under a Taiga user story, with full descriptions.
+ *
+ * Taiga's task-list endpoint does not return `description`, so each task is
+ * re-fetched individually when descriptions are wanted. Descriptions are also
+ * scanned for merge-commit SHAs and Redmine issue ids, which is how release
+ * points are traced back to commits.
+ *
+ * @param {import('../taiga-client.js').TaigaClient} taiga
+ * @param {Object} params - { user_story, project?, status?, include_descriptions?, include_attachments? }
+ */
+export async function getUserStoryTasks(taiga, params = {}) {
+  await taiga.authenticate();
+
+  let slug = params.project;
+  let ref = params.user_story;
+
+  if (typeof ref === 'string' && ref.includes('/us/')) {
+    try {
+      const parsed = parseUserStorySlugRef(ref);
+      slug = slug || parsed.slug;
+      ref = parsed.ref;
+    } catch (e) {
+      return { status: 'error', message: e.message };
+    }
+  }
+  if (ref == null) return { status: 'error', message: 'Provide user_story (a #ref or a Taiga user story URL)' };
+  if (!slug) return { status: 'error', message: 'Provide project (slug or name) when user_story is a bare ref' };
+
+  const projects = await taiga.listProjects();
+  const proj = matchProject(projects, slug);
+  if (!proj) return { status: 'error', message: `No project matching "${slug}"` };
+
+  let us;
+  try {
+    us = await taiga.getUserStoryByRef(proj.slug, ref);
+  } catch {
+    return { status: 'error', message: `No user story #${ref} in project "${proj.slug}"` };
+  }
+
+  const includeDescriptions = params.include_descriptions !== false;
+  const includeAttachments = params.include_attachments === true;
+
+  const rows = await taiga.getTasksByUserStory(us.id);
+  const tasks = [];
+
+  for (const t of rows) {
+    const statusName = t.status_extra_info?.name || '';
+    if (params.status && statusName.toLowerCase() !== String(params.status).toLowerCase()) continue;
+
+    const item = {
+      ref: t.ref,
+      id: t.id,
+      subject: t.subject,
+      status: statusName,
+      is_closed: t.is_closed,
+      assignee: t.assigned_to_extra_info?.full_name_display || null,
+      due_date: t.due_date
+    };
+
+    if (includeDescriptions) {
+      const full = await taiga.getTask(t.id);
+      item.description = full.description || '';
+      const refs = extractReferences(item.description);
+      item.commits = refs.commits;
+      item.redmine_issues = refs.redmine;
+    }
+
+    if (includeAttachments) {
+      try {
+        const atts = await taiga.getTaskAttachments(t.id, proj.id);
+        item.attachments = (atts || []).map(a => ({ id: a.id, name: a.name, size: a.size, url: a.url }));
+      } catch { item.attachments = []; }
+    }
+
+    tasks.push(item);
+  }
+
+  tasks.sort((a, b) => a.ref - b.ref);
+
+  return {
+    status: 'success',
+    project: proj.slug,
+    user_story: {
+      ref: us.ref,
+      id: us.id,
+      subject: us.subject,
+      status: us.status_extra_info?.name,
+      description: us.description || ''
+    },
+    count: tasks.length,
+    tasks
+  };
+}
+
+/**
+ * Update a Taiga task's status and/or description.
+ * Identify the task by numeric task_id, or by ref + project.
+ * @param {import('../taiga-client.js').TaigaClient} taiga
+ * @param {Object} params - { task_id?, ref?, project?, status?, description? }
+ */
+export async function updateTaigaTask(taiga, params = {}) {
+  await taiga.authenticate();
+
+  let taskId = params.task_id, projectId = null;
+  if (!taskId) {
+    if (params.ref == null || !params.project) {
+      return { status: 'error', message: 'Provide task_id, or both ref and project' };
+    }
+    const projects = await taiga.listProjects();
+    const proj = matchProject(projects, params.project);
+    if (!proj) return { status: 'error', message: `No project matching "${params.project}"` };
+    projectId = proj.id;
+    const t = await taiga.getTaskByRef(proj.id, params.ref);
+    taskId = t.id;
+  }
+
+  const patch = {};
+  if (params.description != null) patch.description = params.description;
+  if (params.status) {
+    const current = await taiga.getTask(taskId);
+    projectId = projectId || current.project;
+    const statuses = await taiga.getTaskStatuses(projectId);
+    const st = statuses.find(s => (s.name || '').toLowerCase() === String(params.status).toLowerCase());
+    if (!st) {
+      return { status: 'error', message: `No task status "${params.status}" in this project. Available: ${statuses.map(s => s.name).join(', ')}` };
+    }
+    patch.status = st.id;
+  }
+  if (!Object.keys(patch).length) {
+    return { status: 'error', message: 'Nothing to update — provide status and/or description' };
+  }
+
+  const updated = await taiga.updateTask(taskId, patch);
+  return {
+    status: 'success',
+    id: updated.id,
+    ref: updated.ref,
+    subject: updated.subject,
+    new_status: updated.status_extra_info?.name,
+    description_updated: params.description != null
+  };
+}
+
+/**
+ * Download a Taiga task attachment to disk (by url, or by attachment_id).
+ * @param {import('../taiga-client.js').TaigaClient} taiga
+ * @param {Object} params - { url?, attachment_id?, filename?, save_dir?, include_text_preview?, preview_chars? }
+ */
+export async function downloadTaigaAttachment(taiga, params = {}) {
+  await taiga.authenticate();
+  let url = params.url, filename = params.filename, id = params.attachment_id;
+  if (!url && id) {
+    const meta = await taiga.getAttachment(id);
+    url = meta.url; filename = filename || meta.name;
+  }
+  if (!url) return { status: 'error', message: 'Provide url or attachment_id' };
+
+  const res = await taiga.downloadAttachment(url, { saveDir: params.save_dir, attachmentId: id, filename });
+
+  let textPreview = null;
+  const isTextish = /\.(txt|sql|csv|json|xml|log|md|jds|js)$/i.test(filename || '');
+  if (params.include_text_preview !== false && isTextish) {
+    try { textPreview = fs.readFileSync(res.path, 'utf8').slice(0, params.preview_chars || 4000); }
+    catch { /* binary */ }
+  }
+  return { status: 'success', path: res.path, size: res.size, filename: filename || null, ...(textPreview != null ? { textPreview } : {}) };
+}
+
 export default {
   validateUserStory,
   createUserStory,
   createTaigaTasks,
-  exportTasksToErp
+  exportTasksToErp,
+  getTaigaTasks,
+  getUserStoryTasks,
+  updateTaigaTask,
+  downloadTaigaAttachment
 };

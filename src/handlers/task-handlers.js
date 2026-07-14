@@ -40,6 +40,10 @@ export function createTaskHandlers(erpnext, gitlabConfig) {
 
     'erpnext_create_tasks_from_analysis': async (args) => {
       return await taskTools.createTasksFromAnalysis(erpnext, args);
+    },
+
+    'erpnext_get_developer_tasks': async (args) => {
+      return await taskTools.getDeveloperTasks(erpnext, args || {});
     }
   };
 }

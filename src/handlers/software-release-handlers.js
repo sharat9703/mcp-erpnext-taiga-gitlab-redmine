@@ -50,6 +50,10 @@ export function createSoftwareReleaseHandlers(erpnext, gitlabConfig, redmineConf
       return await softwareReleaseTools.updateRedmineIssue(redmineConfig, args);
     },
 
+    'erpnext_download_redmine_attachment': async (args) => {
+      return await softwareReleaseTools.downloadRedmineAttachment(redmineConfig, args);
+    },
+
     'erpnext_get_software_release': async (args) => {
       return await softwareReleaseTools.getSoftwareRelease(erpnext, args.release_url, args.release_name);
     },

@@ -3,6 +3,7 @@
  * Creates software release documents from GitLab merge requests
  */
 
+import fs from 'node:fs';
 import { GitLabClient } from '../gitlab-client.js';
 import { RedmineClient } from '../redmine-client.js';
 
@@ -1100,7 +1101,47 @@ export async function createSoftwareRelease(erpnext, gitlabConfig, redmineConfig
   };
 }
 
+/**
+ * Download a Redmine attachment to disk (e.g. an issue's script/spreadsheet).
+ * @param {Object} redmineConfig - { url, apiKey }
+ * @param {Object} params - { attachment, save_dir?, include_text_preview?, preview_chars? }
+ * @returns {Object} { status, id, filename, size, contentType, path, textPreview? }
+ */
+export async function downloadRedmineAttachment(redmineConfig, params = {}) {
+  try {
+    if (!redmineConfig || !redmineConfig.apiKey) {
+      return { status: 'error', message: 'REDMINE_API_KEY not configured' };
+    }
+    const ref = params.attachment ?? params.attachment_id ?? params.url;
+    if (!ref) return { status: 'error', message: 'Provide "attachment" (id or download URL)' };
+
+    const redmine = new RedmineClient(redmineConfig);
+    const info = await redmine.downloadAttachment(ref, { saveDir: params.save_dir });
+
+    let textPreview = null;
+    const isTextish = /text\/|json|xml|csv|sql/i.test(info.contentType || '') ||
+      /\.(txt|sql|csv|json|xml|log|md|jds|js)$/i.test(info.filename || '');
+    if (params.include_text_preview !== false && isTextish) {
+      try { textPreview = fs.readFileSync(info.path, 'utf8').slice(0, params.preview_chars || 4000); }
+      catch { /* binary or unreadable */ }
+    }
+
+    return {
+      status: 'success',
+      id: info.id,
+      filename: info.filename,
+      size: info.size,
+      contentType: info.contentType,
+      path: info.path,
+      ...(textPreview != null ? { textPreview } : {})
+    };
+  } catch (error) {
+    return { status: 'error', message: `Failed to download attachment: ${error.message}` };
+  }
+}
+
 export default {
+  downloadRedmineAttachment,
   listProducts,
   listCustomersForRelease,
   getMrDetails,

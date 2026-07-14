@@ -46,6 +46,26 @@ export function createTaigaHandlers(erpnext, taigaConfig = {}) {
 
     'erpnext_export_tasks_to_erp': async (args) => {
       return await taigaTools.exportTasksToErp(erpnext, args);
+    },
+
+    'erpnext_get_taiga_tasks': async (args) => {
+      const taiga = await getTaigaClient();
+      return await taigaTools.getTaigaTasks(taiga, args);
+    },
+
+    'erpnext_get_user_story_tasks': async (args) => {
+      const taiga = await getTaigaClient();
+      return await taigaTools.getUserStoryTasks(taiga, args);
+    },
+
+    'erpnext_update_taiga_task': async (args) => {
+      const taiga = await getTaigaClient();
+      return await taigaTools.updateTaigaTask(taiga, args);
+    },
+
+    'erpnext_download_taiga_attachment': async (args) => {
+      const taiga = await getTaigaClient();
+      return await taigaTools.downloadTaigaAttachment(taiga, args);
     }
   };
 }
