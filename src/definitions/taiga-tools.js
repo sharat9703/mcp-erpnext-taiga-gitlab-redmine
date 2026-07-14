@@ -210,6 +210,36 @@ export const taigaTools = [
     }
   },
   {
+    name: 'erpnext_get_user_story_tasks',
+    description: "Get ALL tasks under a Taiga user story (any assignee) with their FULL descriptions, plus the merge-commit SHAs and Redmine issue ids referenced in each description. Use this — not erpnext_get_taiga_tasks — when working from a user story URL/ref, e.g. to collect the 'Ready for test' points of a sprint and trace them to the commits to cherry-pick into a release branch.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        user_story: {
+          type: 'string',
+          description: 'User story #ref (e.g. "1236") or full Taiga URL (e.g. "https://agile.credenceanalytics.com/project/tcil-mercury-fx/us/1236"). A URL also supplies the project.'
+        },
+        project: {
+          type: 'string',
+          description: 'Project slug or name (e.g. "tcil-mercury-fx"). Required only when user_story is a bare ref.'
+        },
+        status: {
+          type: 'string',
+          description: 'Filter by task status name (e.g. "Ready for test", "New", "Closed"). Omit to return every task in the story.'
+        },
+        include_descriptions: {
+          type: 'boolean',
+          description: 'Fetch each task individually to get its description, commits and redmine_issues (default: true). Set false for a fast subject/status-only listing.'
+        },
+        include_attachments: {
+          type: 'boolean',
+          description: "Include each task's attachment metadata (default: false — costs one extra call per task)."
+        }
+      },
+      required: ['user_story']
+    }
+  },
+  {
     name: 'erpnext_update_taiga_task',
     description: "Update a Taiga task's status and/or description. Identify the task by numeric task_id, or by ref + project (slug or name). Status names are resolved to the project's status ids automatically.",
     inputSchema: {
