@@ -197,6 +197,18 @@ export class TaigaClient {
     return res.data;
   }
 
+  /**
+   * All tasks under a user story. The list endpoint omits `description` — fetch
+   * each task with getTask() when the body is needed.
+   */
+  async getTasksByUserStory(userStoryId) {
+    const res = await this.client.get('/tasks', {
+      headers: this.authHeaders(),
+      params: { user_story: userStoryId }
+    });
+    return res.data;
+  }
+
   /** Resolve a task by its per-project reference number. */
   async getTaskByRef(projectId, ref) {
     const res = await this.client.get('/tasks/by_ref', {
