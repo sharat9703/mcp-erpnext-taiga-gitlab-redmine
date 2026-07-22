@@ -301,6 +301,92 @@ export class RedmineClient {
   }
 
   /**
+   * Get the currently-authenticated user (resolved from the API key).
+   * @returns {Object} { success, user: { id, login, firstName, lastName } }
+   */
+  async getCurrentUser() {
+    try {
+      const response = await this.client.get('/users/current.json');
+      const user = response.data.user;
+      return {
+        success: true,
+        user: {
+          id: user.id,
+          login: user.login,
+          firstName: user.firstname,
+          lastName: user.lastname
+        }
+      };
+    } catch (error) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        return { success: false, error: 'Redmine authentication failed - check API key' };
+      }
+      return {
+        success: false,
+        error: error.response?.data?.errors?.join(', ') || error.message
+      };
+    }
+  }
+
+  /**
+   * Create a new Redmine issue.
+   * @param {Object} fields - Issue fields. Recognised keys:
+   *   projectId (required), subject (required), trackerId, description,
+   *   assignedToId, priorityId, statusId, dueDate, startDate, parentIssueId,
+   *   customFields ([{ id, value }])
+   * @returns {Object} { success, issueId, url } - Redmine returns 201 with the created issue
+   */
+  async createIssue(fields = {}) {
+    if (!fields.projectId) {
+      return { success: false, error: 'projectId is required to create an issue' };
+    }
+    if (!fields.subject) {
+      return { success: false, error: 'subject is required to create an issue' };
+    }
+
+    const issue = { project_id: fields.projectId, subject: fields.subject };
+    if (fields.trackerId !== undefined) issue.tracker_id = fields.trackerId;
+    if (fields.description !== undefined) issue.description = fields.description;
+    if (fields.assignedToId !== undefined) issue.assigned_to_id = fields.assignedToId;
+    if (fields.priorityId !== undefined) issue.priority_id = fields.priorityId;
+    if (fields.statusId !== undefined) issue.status_id = fields.statusId;
+    if (fields.dueDate !== undefined) issue.due_date = fields.dueDate;
+    if (fields.startDate !== undefined) issue.start_date = fields.startDate;
+    if (fields.parentIssueId !== undefined) issue.parent_issue_id = fields.parentIssueId;
+    if (Array.isArray(fields.customFields) && fields.customFields.length) {
+      issue.custom_fields = fields.customFields.map(f => ({ id: f.id, value: f.value }));
+    }
+
+    try {
+      const response = await this.client.post('/issues.json', { issue });
+      const created = response.data.issue;
+      return {
+        success: true,
+        issueId: created.id,
+        subject: created.subject,
+        status: created.status?.name,
+        tracker: created.tracker?.name,
+        project: created.project?.name,
+        url: `${this.baseURL}/issues/${created.id}`
+      };
+    } catch (error) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        return { success: false, error: 'Redmine authentication failed or insufficient permissions to create an issue' };
+      }
+      if (error.response?.status === 422) {
+        return {
+          success: false,
+          error: error.response?.data?.errors?.join(', ') || 'Validation failed'
+        };
+      }
+      return {
+        success: false,
+        error: error.response?.data?.errors?.join(', ') || error.message
+      };
+    }
+  }
+
+  /**
    * Get multiple issues
    * @param {string[]} issueUrlsOrIds - Array of issue URLs or IDs
    * @returns {Object[]} Array of issue details

@@ -258,6 +258,72 @@ export const softwareReleaseTools = [
     }
   },
   {
+    name: 'erpnext_create_redmine_issue',
+    description: 'Create a NEW Redmine issue in a project. Use this to open a fresh ticket (e.g. a Clarification/tracking ticket) — distinct from erpnext_update_redmine_issue, which only edits an existing issue. Some projects require assignee (yourself), due date and certain custom fields (e.g. Complexity); pass assign_to_current_user:true to auto-assign to the API-key user, and custom_fields for any required custom field. Requires REDMINE_API_KEY with create permission on the project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: {
+          type: 'string',
+          description: 'Target project identifier (string slug, e.g. "fbnqiwf6ioa") or numeric project id.'
+        },
+        subject: {
+          type: 'string',
+          description: 'Issue subject/title (keep concise).'
+        },
+        tracker_id: {
+          type: 'number',
+          description: 'Tracker id (e.g. 2 = Clarification). Defaults to the project default tracker if omitted.'
+        },
+        description: {
+          type: 'string',
+          description: 'Issue description body.'
+        },
+        assigned_to_id: {
+          type: 'number',
+          description: 'User id to assign the issue to. If omitted and assign_to_current_user is true, the API-key user is used.'
+        },
+        assign_to_current_user: {
+          type: 'boolean',
+          description: 'When true and assigned_to_id is not given, resolve and assign to the current (API-key) user. Default: false.'
+        },
+        priority_id: {
+          type: 'number',
+          description: 'Priority id (optional).'
+        },
+        status_id: {
+          type: 'number',
+          description: 'Initial status id (optional; many projects force their default status regardless).'
+        },
+        due_date: {
+          type: 'string',
+          description: 'Due date (YYYY-MM-DD). Required by some projects.'
+        },
+        start_date: {
+          type: 'string',
+          description: 'Start date (YYYY-MM-DD) (optional).'
+        },
+        parent_issue_id: {
+          type: 'number',
+          description: 'Parent issue id, to create this as a sub-task (optional).'
+        },
+        custom_fields: {
+          type: 'array',
+          description: 'Custom field values, e.g. [{ "id": 58, "value": "L1" }] for a required Complexity field.',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'number', description: 'Custom field id' },
+              value: { description: 'Custom field value (string, or array for multi-value fields)' }
+            },
+            required: ['id', 'value']
+          }
+        }
+      },
+      required: ['project_id', 'subject']
+    }
+  },
+  {
     name: 'erpnext_get_software_release',
     description: 'Get details of an existing software release (can be used as template reference)',
     inputSchema: {

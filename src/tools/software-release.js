@@ -462,6 +462,72 @@ export async function updateRedmineIssue(redmineConfig, params = {}) {
 }
 
 /**
+ * Create a new Redmine issue.
+ * @param {Object} redmineConfig - Redmine configuration
+ * @param {Object} params - { project_id, subject, tracker_id, description,
+ *   assigned_to_id, assign_to_current_user, priority_id, status_id, due_date,
+ *   start_date, parent_issue_id, custom_fields }
+ * @returns {Object} Create result { success, issueId, url, message }
+ */
+export async function createRedmineIssue(redmineConfig, params = {}) {
+  if (!redmineConfig.apiKey) {
+    return {
+      success: false,
+      error: 'Redmine API key not configured. Set REDMINE_API_KEY in environment variables.'
+    };
+  }
+
+  if (!params.project_id) {
+    return { success: false, error: 'project_id is required' };
+  }
+  if (!params.subject) {
+    return { success: false, error: 'subject is required' };
+  }
+
+  const redmine = new RedmineClient(redmineConfig);
+
+  // Resolve assignee: explicit id wins; otherwise, if asked, assign to the
+  // API-key user (some projects/statuses require the assignee to be yourself).
+  let assignedToId = params.assigned_to_id;
+  if (assignedToId === undefined && params.assign_to_current_user) {
+    const me = await redmine.getCurrentUser();
+    if (!me.success) {
+      return { success: false, error: `Could not resolve current user for assignment: ${me.error}` };
+    }
+    assignedToId = me.user.id;
+  }
+
+  const result = await redmine.createIssue({
+    projectId: params.project_id,
+    subject: params.subject,
+    trackerId: params.tracker_id,
+    description: params.description,
+    assignedToId,
+    priorityId: params.priority_id,
+    statusId: params.status_id,
+    dueDate: params.due_date,
+    startDate: params.start_date,
+    parentIssueId: params.parent_issue_id,
+    customFields: params.custom_fields
+  });
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return {
+    success: true,
+    issueId: result.issueId,
+    subject: result.subject,
+    status: result.status,
+    tracker: result.tracker,
+    project: result.project,
+    url: result.url,
+    message: `Created Redmine issue #${result.issueId} (${result.tracker || 'issue'}) in ${result.project || params.project_id}`
+  };
+}
+
+/**
  * Get multiple Redmine issue titles
  * @param {Object} redmineConfig - Redmine configuration
  * @param {string[]} issueIds - Array of Redmine issue IDs or URLs
