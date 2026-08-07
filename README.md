@@ -1,252 +1,263 @@
-# MCP ERPNext
+# devflow-mcp
 
-[![npm version](https://badge.fury.io/js/mcp-erpnext.svg)](https://www.npmjs.com/package/mcp-erpnext)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+An MCP (Model Context Protocol) server that exposes engineering-workflow operations to MCP clients such as Claude Code, Claude Desktop, or any other MCP-compatible assistant. It wraps four systems behind one stdio server: **ERPNext** (timesheets, leave applications, projects, Developer Tasks, Software Release documents), **Taiga** (user stories, tasks, attachments), **Redmine** (issue read/create/update, attachments), and **GitLab** (merge request listing, analysis, and release-note generation from MRs). All 52 tools are registered in a single process; ERPNext credentials are mandatory, the other three services activate only when their credentials are present.
 
-Model Context Protocol (MCP) server for ERPNext - manage timesheets, leave applications, projects, and software releases via Claude, Gemini, or any MCP-compatible AI assistant.
+## Prerequisites
 
-## Features
-
-- **Timesheets**: Create, edit, submit, and manage timesheets
-- **Leave Applications**: Apply for leave, check balances, manage applications
-- **Projects**: List projects and tasks
-- **Software Releases**: Create release documents from GitLab merge requests with auto-detection
-- **Smart Validation**: Automatic overlap detection for time entries
-- **Draft Editing**: Full support for editing draft timesheets
+- **Node.js >= 18** (declared in `package.json` `engines`). No build step — the server runs plain ESM JavaScript from `src/`.
+- **ERPNext account** — required. The server exits at startup without it.
+- **GitLab personal access token** — optional; needed for merge-request and software-release tools.
+- **Redmine API key** — optional; needed for Redmine issue and attachment tools, and for auto-fetching ticket titles during release creation.
+- **Taiga credentials** (token, or user + password) — optional; needed for all Taiga tools.
 
 ## Installation
 
-### Via npm (recommended)
-
 ```bash
-npm install -g mcp-erpnext
-```
-
-### From source
-
-```bash
-git clone https://github.com/sharat9703/mcp-erpnext-taiga-gitlab-redmine.git
-cd mcp-erpnext
+git clone https://gitlab.credenceanalytics.com/Sharat/devflow-mcp.git
+cd devflow-mcp
 npm install
 ```
 
-## Configuration
+There is no build step. Verify it starts:
 
-### 1. Set up credentials
+```bash
+npm start          # or: node src/index.js
+```
 
-Create a `.env` file or set environment variables:
+It should print `MCP ERPNext Server running` on stderr and then wait for stdio input (Ctrl+C to exit).
+
+### Configuration
+
+Create a `.env` file **in the repository root**. `src/index.js` loads it relative to the package root, not the working directory, so the file must sit next to `package.json`.
 
 ```env
-ERPNEXT_URL=https://your-erpnext-instance.com
-ERPNEXT_USERNAME=your-email@example.com
+ERPNEXT_URL=https://erp.example.com
+ERPNEXT_USERNAME=you@example.com
 ERPNEXT_PASSWORD=your-password
-ERPNEXT_TOTP_SECRET=your-totp-secret  # Optional, for 2FA
+ERPNEXT_TOTP_SECRET=BASE32SECRET
 
-# For Software Releases (optional)
 GITLAB_URL=https://gitlab.example.com
-GITLAB_TOKEN=your-gitlab-personal-access-token
+GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx
+
 REDMINE_URL=https://redmine.example.com
-REDMINE_API_KEY=your-redmine-api-key  # For auto-fetching ticket titles
+REDMINE_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+TAIGA_HOST=https://taiga.example.com/api/v1
+TAIGA_USER=you@example.com
+TAIGA_PASS=your-password
+# TAIGA_TOKEN=eyJ0eXAi...    # alternative to TAIGA_USER + TAIGA_PASS
 ```
 
-### 2. Configure your AI client
+| Variable | Required | Default | What it is / where to get it |
+|----------|----------|---------|------------------------------|
+| `ERPNEXT_URL` | Yes | — | Base URL of your ERPNext/Frappe instance, no trailing path. |
+| `ERPNEXT_USERNAME` | Yes | — | ERPNext login, usually your email address. |
+| `ERPNEXT_PASSWORD` | Yes | — | Password for that ERPNext login. |
+| `ERPNEXT_TOTP_SECRET` | No | — | Base32 TOTP seed, only if your ERPNext enforces 2FA. Shown as the "manual entry" secret when you set up the authenticator app. |
+| `GITLAB_URL` | No | `https://gitlab.credenceanalytics.com` | Base URL of your GitLab instance. |
+| `GITLAB_TOKEN` | No | — | Personal access token with `api` (or at least `read_api`) scope: GitLab → User Settings → Access Tokens. |
+| `REDMINE_URL` | No | `https://support.credenceanalytics.com` | Base URL of your Redmine instance. |
+| `REDMINE_API_KEY` | No | — | Redmine REST API key: Redmine → My account → API access key → Show. Needs write permission for the issue-create/update tools. |
+| `TAIGA_HOST` | No | `https://api.taiga.io/api/v1` | Taiga **API** base URL — must include the `/api/v1` suffix. |
+| `TAIGA_USER` | No | — | Taiga username or email (used with `TAIGA_PASS` for password login). |
+| `TAIGA_PASS` | No | — | Password for `TAIGA_USER`. |
+| `TAIGA_TOKEN` | No | — | Pre-issued Taiga auth token. Use this *or* `TAIGA_USER` + `TAIGA_PASS`. |
 
-**Claude Desktop** (`~/.claude/claude_desktop_config.json` or `%APPDATA%\Claude\claude_desktop_config.json`):
+Credentials may also be supplied through the MCP client's `env` block instead of `.env` (see below); the process environment wins where both are set.
+
+## Client setup
+
+Add the server to your MCP client config. Use an **absolute path** to `src/index.js`.
+
+**Claude Desktop** — `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {
   "mcpServers": {
-    "erpnext": {
-      "command": "npx",
-      "args": ["mcp-erpnext"],
-      "env": {
-        "ERPNEXT_URL": "https://your-erpnext-instance.com",
-        "ERPNEXT_USERNAME": "your-username",
-        "ERPNEXT_PASSWORD": "your-password"
-      }
-    }
-  }
-}
-```
-
-**Or from local installation:**
-
-```json
-{
-  "mcpServers": {
-    "erpnext": {
+    "devflow": {
       "command": "node",
-      "args": ["/path/to/mcp-erpnext/src/index.js"]
-    }
-  }
-}
-```
-
-**Gemini CLI** (`~/.gemini/settings.json`):
-
-```json
-{
-  "mcpServers": {
-    "erpnext": {
-      "command": "npx",
-      "args": ["mcp-erpnext"],
+      "args": ["D:\\devflow-mcp\\src\\index.js"],
       "env": {
-        "ERPNEXT_URL": "https://your-erpnext-instance.com",
-        "ERPNEXT_USERNAME": "your-username",
-        "ERPNEXT_PASSWORD": "your-password"
+        "ERPNEXT_URL": "https://erp.example.com",
+        "ERPNEXT_USERNAME": "you@example.com",
+        "ERPNEXT_PASSWORD": "your-password",
+        "GITLAB_TOKEN": "glpat-xxxxxxxxxxxxxxxxxxxx",
+        "REDMINE_API_KEY": "xxxxxxxxxxxxxxxxxxxxxxxx",
+        "TAIGA_HOST": "https://taiga.example.com/api/v1",
+        "TAIGA_USER": "you@example.com",
+        "TAIGA_PASS": "your-password"
       }
     }
   }
 }
 ```
 
-## Usage Examples
+**Claude Code** — same block inside `.mcp.json` (project scope) or `~/.claude.json` (user scope), or register it in one command:
 
-Once configured, you can ask your AI assistant:
-
-```
-Create weekly timesheet for project PROJ-0460
+```bash
+claude mcp add devflow -- node /absolute/path/to/devflow-mcp/src/index.js
 ```
 
-```
-Show my draft timesheets
-```
+Windows path notes:
 
-```
-Submit timesheet TS-2025-00123
-```
+- In JSON, backslashes must be escaped: `"D:\\devflow-mcp\\src\\index.js"`. Forward slashes (`"D:/devflow-mcp/src/index.js"`) also work and avoid the issue.
+- Keeping credentials in `.env` and omitting the `env` block entirely is simpler — the server finds `.env` from its own location regardless of where the client launches it from.
 
-```
-Apply for leave from Dec 25 to Dec 27
-```
+## Usage
 
-```
-Update time log 0 in timesheet TS-2025-00123 to 8 hours
-```
+Once the server is connected, ask the assistant in plain language:
 
-```
-Create software release for https://gitlab.example.com/project/-/merge_requests/123
-using template https://erp.example.com/app/software-release/Product-v1.0.0
-```
+- **"Create my weekly timesheet for project PROJ-0460."**
+  Calls `erpnext_create_weekly_timesheet`, which creates Mon–Fri entries of 7h Billable + 2h Non-Billable, validates that no time ranges overlap, and returns the draft timesheet name for review before you submit it.
 
-See [USAGE.md](USAGE.md) for complete examples.
+- **"Preview a software release for https://gitlab.example.com/team/repo/-/merge_requests/412 using https://erp.example.com/app/software-release/PROD-v1.2.0 as the template."**
+  Calls `erpnext_preview_software_release`: pulls commits and notes from the MR, extracts Redmine ids from the description, fetches their titles from Redmine, inherits Product/Customer/Reviewer from the template release, and shows every field plus its source. Nothing is written until you follow up with `erpnext_create_software_release`.
 
-## Available Tools
+- **"Show the tasks under this Taiga user story and the commits they reference."**
+  Calls `erpnext_get_user_story_tasks`, returning each task's full description along with the merge-commit SHAs and Redmine issue ids found in it — useful for assembling a cherry-pick list for a release branch.
+
+- **"Apply for leave from 25 Dec to 27 Dec, and show my leave balance first."**
+  Calls `erpnext_get_leave_balance`, then `erpnext_apply_leave` to create the application as a draft; `erpnext_submit_leave_application` sends it for approval as a separate, explicit step.
+
+See [USAGE.md](USAGE.md) for longer worked examples.
+
+## Tool reference
+
+52 tools, registered in `src/definitions/` and dispatched from `src/handlers/`.
+
+### Auth
+
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `erpnext_login` | Log in to ERPNext with the configured username/password and optional TOTP. Call before other operations. | — |
+| `erpnext_get_current_employee` | Get the Employee record linked to the logged-in user. | — |
 
 ### Timesheets
-| Tool | Description |
-|------|-------------|
-| `erpnext_create_weekly_timesheet` | Create weekly timesheet (7h billable + 2h non-billable/day) |
-| `erpnext_create_timesheet` | Create custom timesheet |
-| `erpnext_create_custom_timesheet` | Create timesheet with specific entries |
-| `erpnext_list_timesheets` | List timesheets with filters |
-| `erpnext_get_timesheet` | Get timesheet details |
-| `erpnext_get_my_draft_timesheets` | Get current user's draft timesheets |
-| `erpnext_update_time_log` | Edit a time entry in draft timesheet |
-| `erpnext_remove_time_log` | Remove a time entry from draft |
-| `erpnext_update_timesheet_note` | Update timesheet note |
-| `erpnext_delete_timesheet` | Delete draft timesheet |
-| `erpnext_submit_timesheet` | Submit for approval |
-| `erpnext_cancel_timesheet` | Cancel timesheet |
 
-### Leave Applications
-| Tool | Description |
-|------|-------------|
-| `erpnext_apply_leave` | Apply for leave |
-| `erpnext_list_leave_applications` | List leave applications |
-| `erpnext_get_my_pending_leaves` | Get pending leave applications |
-| `erpnext_get_leave_balance` | Check leave balance |
-| `erpnext_submit_leave_application` | Submit for approval |
-| `erpnext_cancel_leave_application` | Cancel leave application |
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `erpnext_list_activity_types` | List available activity types for timesheets. | — |
+| `erpnext_create_timesheet` | Create a timesheet with an array of time logs. | `time_logs` |
+| `erpnext_quick_timesheet` | Create a timesheet for today with a single entry. | `hours`, `activity_type` |
+| `erpnext_create_weekly_timesheet` | Create a Mon–Fri week of 7h Billable + 2h Non-Billable per day (hours and days configurable). | — |
+| `erpnext_create_custom_timesheet` | Create a timesheet from fully custom entries. | `entries` |
+| `erpnext_list_timesheets` | List timesheets, filterable by employee, status and date range. | — |
+| `erpnext_get_timesheet` | Get one timesheet's details. | `name` |
+| `erpnext_get_my_draft_timesheets` | List all draft timesheets for the current employee. | — |
+| `erpnext_add_time_log` | Append a time log to an existing draft timesheet. | `timesheet`, `activity_type`, `hours` |
+| `erpnext_update_time_log` | Edit hours, times, project, activity type or description of one log in a draft. | `timesheet`, `time_log_index` |
+| `erpnext_remove_time_log` | Remove one time log from a draft (cannot remove the last one). | `timesheet`, `time_log_index` |
+| `erpnext_update_timesheet_note` | Update the note on a draft timesheet. | `timesheet`, `note` |
+| `erpnext_delete_timesheet` | Delete a draft (unsubmitted) timesheet. | `timesheet` |
+| `erpnext_submit_timesheet` | Submit a draft timesheet. | `name` |
+| `erpnext_cancel_timesheet` | Cancel a submitted timesheet. | `name` |
 
-### Core
-| Tool | Description |
-|------|-------------|
-| `erpnext_login` | Authenticate with ERPNext |
-| `erpnext_get_current_employee` | Get logged-in user's employee record |
-| `erpnext_list_projects` | List projects |
-| `erpnext_list_tasks` | List tasks for a project |
-| `erpnext_list_activity_types` | List available activity types |
+### Leave
 
-### Software Releases
-| Tool | Description |
-|------|-------------|
-| `erpnext_preview_software_release` | **Preview release before creating** - shows all fields and sources |
-| `erpnext_create_software_release` | Create release from GitLab MR with auto-detection |
-| `erpnext_get_mr_details` | Get MR details (Redmine IDs, patches, version) |
-| `erpnext_get_redmine_issue` | Get Redmine ticket title |
-| `erpnext_get_software_release` | Get existing release (use as template) |
-| `erpnext_list_software_releases` | List recent releases |
-| `erpnext_list_products` | List available products |
-| `erpnext_list_customers_for_release` | List available customers |
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `erpnext_list_leave_types` | List available leave types. | — |
+| `erpnext_get_leave_balance` | Get leave balance for the current employee, optionally for one leave type. | — |
+| `erpnext_list_leave_applications` | List leave applications, filterable by status, type and date range. | — |
+| `erpnext_get_leave_application` | Get one leave application's details. | `name` |
+| `erpnext_get_my_pending_leaves` | List pending leave applications for the current employee. | — |
+| `erpnext_get_my_approved_leaves` | List approved leave applications for the current employee. | — |
+| `erpnext_apply_leave` | Apply for leave, single or multiple days, with half-day support. | `from_date` |
+| `erpnext_submit_leave_application` | Submit a leave application for approval. | `name` |
+| `erpnext_cancel_leave_application` | Cancel a leave application. | `name` |
 
-## Key Features
+### Tasks & Projects
 
-### Time Entry Overlap Prevention
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `erpnext_list_projects` | List ERPNext projects, optionally filtered by status. | — |
+| `erpnext_list_tasks` | List tasks for a project. | `project` |
+| `erpnext_create_tasks_from_analysis` | Create ERPNext tasks from a prior merge-request analysis, marked Completed and assigned to the current employee. | `tasks` |
+| `erpnext_get_developer_tasks` | Get Developer Tasks for a developer (default: logged-in user) with date/status/product/subject filters, plus a per-client breakdown. | — |
 
-The server automatically validates that time entries don't overlap:
+### Taiga
 
-```
-Error: Time entries have overlapping times:
-Time entry 1 (Billable Work: 2025-12-02 10:00:00 - 17:00:00) overlaps with
-entry 2 (Non Billable Work: 2025-12-02 15:00:00 - 17:00:00)
-```
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `erpnext_validate_user_story` | Validate a user story by URL and return its id, title and project. | `user_story_url` |
+| `erpnext_create_user_story` | Create a user story in a Taiga project; returns id, ref and URL. | `project_slug`, `subject` |
+| `erpnext_create_taiga_tasks` | Create one or more tasks under a user story, resolving assignees from project members and setting custom attributes (complexity, task type) where they exist. | `user_story_id`, `project_slug`, `tasks` |
+| `erpnext_get_taiga_tasks` | Get tasks assigned to a user (default: authenticated user) with descriptions and attachment metadata; open tasks only by default. | — |
+| `erpnext_get_user_story_tasks` | Get all tasks under a user story (any assignee) with full descriptions, plus merge-commit SHAs and Redmine ids referenced in them. | `user_story` |
+| `erpnext_update_taiga_task` | Update a task's status and/or description, identified by `task_id` or by `ref` + project. | — |
+| `erpnext_download_taiga_attachment` | Download a task attachment to disk by URL or attachment id; returns the saved path and a text preview where applicable. | — |
+| `erpnext_export_tasks_to_erp` | Export tasks to ERPNext as Developer Task documents, resolving the employee code, mapping task type to an ERP category and normalizing complexity. | `tasks` |
 
-### Draft Editing
+### Redmine
 
-Edit draft timesheets before submission:
-- Update hours, times, project, activity type
-- Remove individual time entries
-- Update notes
-- Delete entire draft
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `erpnext_get_redmine_issue` | Get an issue's title/subject from its id or URL. | `issue_id` |
+| `erpnext_get_redmine_issue_details` | Get full issue content: description, status, priority, assignee, done ratio, comments, attachments, sub-tasks and relations. | `issue_id` |
+| `erpnext_create_redmine_issue` | Create a new issue in a project, with optional tracker, assignee, dates, parent and custom fields. Needs create permission. | `project_id`, `subject` |
+| `erpnext_update_redmine_issue` | Add a note and/or change fields (status by id or name, assignee, priority, done ratio, subject, description, dates). Needs write permission. | `issue_id` |
+| `erpnext_download_redmine_attachment` | Download an issue attachment to disk by attachment id or download URL; returns the saved path, metadata and a text preview where applicable. | `attachment` |
 
-### Software Release Auto-Detection
+All Redmine tools require `REDMINE_API_KEY`.
 
-Create software releases from GitLab MRs with intelligent auto-detection:
+### GitLab merge requests
 
-- **Template-based**: Use existing release as template (auto-fills Product, Customer, Reviewer)
-- **Redmine IDs**: Auto-extracted from MR description tables (`| 1. | #124323 | Title |`)
-- **Redmine Titles**: Auto-fetched from Redmine API if configured
-- **Version**: Auto-detected from branch name (e.g., `release-v1.0.0.12`)
-- **Customer**: Auto-detected from GitLab project path
-- **Patch URLs**: Auto-extracted from MR notes/attachments
-- **Test Reports**: Auto-extracted from MR notes/attachments
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `erpnext_list_merge_requests` | List MRs in a project, filterable by state, author, target branch and creation date range. | `project_path` |
+| `erpnext_analyze_merge_request` | Analyze one or more MRs: extract commits, group them by type (features/fixes/refactors) and identify Redmine issues, returning a suggested task breakdown for review. | — (pass `mr_url` or `mr_urls`) |
+| `erpnext_get_mr_details` | Get MR details including auto-detected customer, version, Redmine ids from the description and patch/test-report URLs from the notes. | `mr_url` |
 
-## Project Structure
+### Software releases
 
-```
-mcp-erpnext/
-├── src/
-│   ├── index.js              # Entry point
-│   ├── erpnext-client.js     # ERPNext API client
-│   ├── gitlab-client.js      # GitLab API client (for software releases)
-│   ├── redmine-client.js     # Redmine API client (for ticket titles)
-│   ├── resources.js          # MCP resources
-│   ├── definitions/          # Tool schemas
-│   ├── handlers/             # Tool handlers
-│   ├── tools/                # Business logic
-│   └── formatters/           # Response formatters
-├── .env.example
-├── package.json
-├── README.md
-└── USAGE.md
-```
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `erpnext_preview_software_release` | Show what the release document will contain — auto-detected fields, their sources and anything still missing — without creating it. | `mr_urls` |
+| `erpnext_create_software_release` | Create the Software Release document in ERPNext from GitLab MR URL(s), auto-filling Product/Customer/Reviewer from a template release and pulling Redmine ids, ticket titles, patch URLs and test-report URLs. | `mr_urls` |
+| `erpnext_get_software_release` | Get an existing release by URL or name (commonly used as the template reference). | — (pass `release_url` or `release_name`) |
+| `erpnext_list_software_releases` | List recent releases, filterable by product and customer. | — |
+| `erpnext_list_products` | List products (Brands) available for release selection. | — |
+| `erpnext_list_customers_for_release` | List customers available for release selection. | — |
 
-## Contributing
+### Resources
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Read-only endpoints exposed alongside the tools:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+| URI | Contents |
+|-----|----------|
+| `erpnext://timesheets/draft` | Draft timesheets for the current employee |
+| `erpnext://activity-types` | Available timesheet activity types |
+| `erpnext://projects` | All projects |
+| `erpnext://leave-types` | Available leave types |
+| `erpnext://leaves/pending` | Pending leave applications |
+
+## Troubleshooting
+
+**Server exits immediately with "ERPNEXT_URL, ERPNEXT_USERNAME, and ERPNEXT_PASSWORD are required".**
+The `.env` file is missing or not in the repository root. It is loaded from the package root (next to `package.json`), not from the client's working directory. Either move it there or pass the values in the client's `env` block.
+
+**ERPNext login fails / 401.**
+Run `erpnext_login` explicitly and read the error. If the account has 2FA enabled, `ERPNEXT_TOTP_SECRET` must be the Base32 seed — not a 6-digit code. Check that `ERPNEXT_URL` has no trailing slash or path segment.
+
+**Redmine tools return an error about the API key.**
+`REDMINE_API_KEY` is unset or lacks permission. Creating and updating issues needs write access on the target project; a read-only key will fail only on those tools.
+
+**Taiga tools fail to authenticate.**
+Supply either `TAIGA_TOKEN` or both `TAIGA_USER` and `TAIGA_PASS`. `TAIGA_HOST` must point at the API base and include `/api/v1` — a plain site URL will 404.
+
+**GitLab / release tools fail.**
+`GITLAB_TOKEN` needs `api` scope and access to the project the MR lives in. Confirm `GITLAB_URL` matches the instance hosting that MR.
+
+**The server does not appear in the client.**
+- Restart the client fully after editing its config — MCP servers are launched at startup.
+- Check the path in `args` is absolute and the file exists; in JSON, backslashes must be doubled.
+- Run `node /absolute/path/to/src/index.js` in a terminal. If the process prints `MCP ERPNext Server running` and hangs, the server is fine and the problem is the client config; any other output is the actual error.
+- In Claude Code, `claude mcp list` shows registered servers and their connection status.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
 
 ## Author
 
-**Sharat Yaragatti** - [GitHub](https://github.com/sharat9703)
-
+**Sharat Yaragatti** — [GitHub](https://github.com/sharat9703)
