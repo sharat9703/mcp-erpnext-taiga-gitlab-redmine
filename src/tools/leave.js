@@ -68,7 +68,7 @@ export async function getLeaveBalance(client, options = {}) {
   }
 
   // Call the leave balance method
-  const result = await client.call('erpnext.hr.doctype.leave_application.leave_application.get_leave_balance_on', {
+  const result = await client.call('hrms.hr.doctype.leave_application.leave_application.get_leave_balance_on', {
     employee: employeeId,
     date: new Date().toISOString().split('T')[0],
     leave_type: leave_type,
