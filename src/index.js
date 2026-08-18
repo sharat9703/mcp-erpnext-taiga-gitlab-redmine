@@ -35,9 +35,10 @@ import { createAllHandlers } from './handlers/index.js';
 import { RESOURCES, createResourceHandlers } from './resources.js';
 import { formatResponse } from './formatters/index.js';
 
-// Load environment variables from the package root, independent of cwd
+// Load environment variables from DEVFLOW_ENV_FILE if set (the server may be
+// installed read-only, e.g. via npx), else from the package root, independent of cwd
 const __dirname = dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: join(__dirname, '..', '.env') });
+dotenv.config({ path: process.env.DEVFLOW_ENV_FILE || join(__dirname, '..', '.env') });
 
 // Configuration
 const config = {
