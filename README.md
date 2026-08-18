@@ -28,7 +28,7 @@ It should print `MCP ERPNext Server running` on stderr and then wait for stdio i
 
 ### Configuration
 
-Create a `.env` file **in the repository root**. `src/index.js` loads it relative to the package root, not the working directory, so the file must sit next to `package.json`.
+Copy `.env.example` to `.env` **in the repository root**. `src/index.js` loads it relative to the package root, not the working directory, so the file must sit next to `package.json`.
 
 ```env
 ERPNEXT_URL=https://erp.example.com
@@ -62,10 +62,32 @@ TAIGA_PASS=your-password
 | `TAIGA_USER` | No | — | Taiga username or email (used with `TAIGA_PASS` for password login). |
 | `TAIGA_PASS` | No | — | Password for `TAIGA_USER`. |
 | `TAIGA_TOKEN` | No | — | Pre-issued Taiga auth token. Use this *or* `TAIGA_USER` + `TAIGA_PASS`. |
+| `DEVFLOW_ENV_FILE` | No | `<package root>/.env` | Absolute path to the `.env` file to load. Set this when the server runs from a read-only or cached install (e.g. `npx`, or the Claude Code plugin) where there is no writable package root to hold `.env`. |
 
 Credentials may also be supplied through the MCP client's `env` block instead of `.env` (see below); the process environment wins where both are set.
 
 ## Client setup
+
+### Claude Code plugin (recommended)
+
+The server ships as the `devflow-mcp` plugin in the internal marketplace, which registers it for you — no path wiring, no `claude mcp add`:
+
+```
+/plugin marketplace add https://gitlab.credenceanalytics.com/cred-ai/creda-ai-marketplace.git
+/plugin install devflow-mcp@creda-ai-marketplace
+```
+
+The plugin launches the server via `npx` straight from this repository's git tag, so there is nothing to clone or `npm install`. Credentials come from a `.env` file of your own, pointed at by `DEVFLOW_ENV_FILE`:
+
+```bash
+# create ~/.devflow-mcp.env holding the variables from the table above, then:
+setx DEVFLOW_ENV_FILE "%USERPROFILE%\.devflow-mcp.env"         # Windows
+echo 'export DEVFLOW_ENV_FILE=~/.devflow-mcp.env' >> ~/.bashrc  # macOS/Linux
+```
+
+Restart Claude Code afterwards so the new environment variable is picked up.
+
+### Manual registration
 
 Add the server to your MCP client config. Use an **absolute path** to `src/index.js`.
 
