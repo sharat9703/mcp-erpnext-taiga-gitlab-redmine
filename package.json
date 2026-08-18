@@ -29,12 +29,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Gaurav-Pasi/mcp-erpnext.git"
+    "url": "git+https://gitlab.credenceanalytics.com/Sharat/devflow-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/Gaurav-Pasi/mcp-erpnext/issues"
+    "url": "https://gitlab.credenceanalytics.com/Sharat/devflow-mcp/-/issues"
   },
-  "homepage": "https://github.com/Gaurav-Pasi/mcp-erpnext#readme",
+  "homepage": "https://gitlab.credenceanalytics.com/Sharat/devflow-mcp#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.6.0",
