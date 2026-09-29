@@ -158,10 +158,6 @@ export const taigaTools = [
                 type: 'string',
                 description: 'Developer Task Detail type (default: "New").'
               },
-              status: {
-                type: 'string',
-                description: 'Developer Task status (e.g. "Reviewed", "Completed"). Omit to leave the ERP default.'
-              },
               task_type: {
                 type: 'string',
                 description: 'Taiga task type, mapped to an ERP category when category is absent.'

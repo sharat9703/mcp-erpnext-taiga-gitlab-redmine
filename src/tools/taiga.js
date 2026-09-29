@@ -326,7 +326,9 @@ export async function exportTasksToErp(erpnext, params) {
           }
         ]
       };
-      if (t.status) payload.status = String(t.status);
+
+      // `status` is set by the Developer Task workflow (Task Done --Review--> Reviewed,
+      // lead-only). Writing it here only desynchronises it from workflow_state.
 
       await erpnext.createDeveloperTaskDoc(payload);
       if (taigaId) alreadyCreated.add(taigaId);
