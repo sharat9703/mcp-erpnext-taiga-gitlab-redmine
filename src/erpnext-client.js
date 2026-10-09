@@ -154,14 +154,14 @@ export class ERPNextClient {
       throw new Error(`Document ${name} is not in Draft status (docstatus: ${doc.data.docstatus})`);
     }
 
-    // Submit using the frappe.client.submit method
-    const response = await this.client.post('/api/method/frappe.client.submit', {
-      doc: {
-        name
-      }
-    });
-
-    return response.data;
+    try {
+      const response = await this.client.post('/api/method/frappe.client.submit', {
+        doc: doc.data
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(parseErpError(error?.response?.data) || error.message);
+    }
   }
 
   /**
@@ -170,11 +170,15 @@ export class ERPNextClient {
   async cancelDoc(doctype, name) {
     await this.ensureAuthenticated();
 
-    const response = await this.client.post('/api/method/frappe.client.cancel', {
-      name
-    });
-
-    return response.data;
+    try {
+      const response = await this.client.post('/api/method/frappe.client.cancel', {
+        doctype,
+        name
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(parseErpError(error?.response?.data) || error.message);
+    }
   }
 
   /**
